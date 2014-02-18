@@ -111,7 +111,7 @@ class CoffeeScriptCompiler(shellFile: File) {
 
     val arg = JsonConversion.toJson(compileArgs).compactPrint
 
-    val jsExecResult = jsExecutor.executeJsSync(Engine.ExecuteJs(shellFile, immutable.Seq(arg)))
+    val jsExecResult = jsExecutor.executeJsSync(shellFile, immutable.Seq(arg))
     jsExecResult match {
       case JsExecutionResult(0, stdoutBytes, stderrBytes) if stderrBytes.length == 0 =>
         val jsonResult = (new String(stdoutBytes.toArray, "utf-8")).asJson.asInstanceOf[JsObject]
