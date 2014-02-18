@@ -29,9 +29,9 @@ function trace(/*arguments*/) {
 }
 
 trace('Command line arguments:', process.argv[2]);
-var opts = JSON.parse(process.argv[2]);
-var result = compileFile(opts[0]);
-process.stdout.write(JSON.stringify([result]));
+var compileArgsSeq = JSON.parse(process.argv[2]);
+var resultSeq = compileArgsSeq.map(compileFile);
+process.stdout.write(JSON.stringify(resultSeq));
 
 
 // Make the any parent directories needed for the given path
@@ -45,23 +45,23 @@ function makeParentDirs(childPath) {
 // Compile a single file.
 // Returns an object indicating success of failure.
 // The result object uses primitive JS types only, so that it can be JSON encoded.
-function compileFile(fileOptions) {
-  trace('fileOptions', fileOptions);
+function compileFile(compileArgs) {
+  trace('compileArgs', compileArgs);
 
   try {
     var compileOpts = {
-      bare: fileOptions.bare,
-      literate: fileOptions.literate
+      bare: compileArgs.bare,
+      literate: compileArgs.literate
     };
-    var generateSourceMap = fileOptions.sourceMapOpts != null;
+    var generateSourceMap = compileArgs.sourceMapOpts != null;
     if (generateSourceMap) {
       compileOpts.sourceMap = true;
-      compileOpts.generatedFile = fileOptions.sourceMapOpts.javaScriptFileName;
-      compileOpts.sourceRoot = fileOptions.sourceMapOpts.coffeeScriptRootRef;
-      compileOpts.sourceFiles = fileOptions.sourceMapOpts.coffeeScriptPathRefs;
+      compileOpts.generatedFile = compileArgs.sourceMapOpts.javaScriptFileName;
+      compileOpts.sourceRoot = compileArgs.sourceMapOpts.coffeeScriptRootRef;
+      compileOpts.sourceFiles = compileArgs.sourceMapOpts.coffeeScriptPathRefs;
     }
 
-    var code = fs.readFileSync(fileOptions.coffeeScriptInputFile).toString();
+    var code = fs.readFileSync(compileArgs.coffeeScriptInputFile).toString();
     var compileResult;
     try {
       trace('compileOpts', compileOpts);
@@ -91,17 +91,17 @@ function compileFile(fileOptions) {
 
     // Modify source to reference source map
     if (generateSourceMap) {
-      jsOutput = jsOutput + "\n/*\n//@ sourceMappingURL=" + fileOptions.sourceMapOpts.sourceMapRef + "\n*/\n";
+      jsOutput = jsOutput + "\n/*\n//@ sourceMappingURL=" + compileArgs.sourceMapOpts.sourceMapRef + "\n*/\n";
     }
 
-    makeParentDirs(fileOptions.javaScriptOutputFile);
-    fs.writeFileSync(fileOptions.javaScriptOutputFile, jsOutput);
+    makeParentDirs(compileArgs.javaScriptOutputFile);
+    fs.writeFileSync(compileArgs.javaScriptOutputFile, jsOutput);
 
     // Write source map file
     if (generateSourceMap) {
       if (sourceMapOutput == null) throw Error("Failed to write source map: source map was not generated")
-      makeParentDirs(fileOptions.sourceMapOpts.sourceMapOutputFile);
-      fs.writeFileSync(fileOptions.sourceMapOpts.sourceMapOutputFile, sourceMapOutput);
+      makeParentDirs(compileArgs.sourceMapOpts.sourceMapOutputFile);
+      fs.writeFileSync(compileArgs.sourceMapOpts.sourceMapOutputFile, sourceMapOutput);
     }
 
     return {

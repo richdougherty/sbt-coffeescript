@@ -43,7 +43,7 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
     }
   }
 
-  private def compile(args: CompileArgs): CompileResult = {
+  private def compileBatch(argsSeq: Seq[CompileArgs]): List[CompileResult] = {
     implicit val actorSystem = ActorSystem()
     try {
       import actorSystem.dispatcher
@@ -51,7 +51,7 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
       val tempFile = File.createTempFile("sbt-coffeescript-shell", ".js")
       tempFile.deleteOnExit()
       val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(tempFile)
-      compiler.compileFile(jsExecutor, args)
+      compiler.compileBatch(jsExecutor, argsSeq).to[List]
     } finally {
       actorSystem.shutdown()
     }
@@ -62,16 +62,16 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
     "compile a trivial file" in {
       withTempFiles(List("x = 1"), 1) {
         case List(tmpDir, csFile, jsFile) =>
-          compile(CompileArgs(
+          compileBatch(List(CompileArgs(
             coffeeScriptInputFile = csFile,
             javaScriptOutputFile = jsFile,
             sourceMapOpts = None,
             bare = false,
             literate = false
-          ))
+          )))
       } match {
         case (compileResult, List(jsString)) =>
-           compileResult must_== (CompileSuccess)
+           compileResult must_== (List(CompileSuccess))
            jsString must_== Some(
             """|(function() {
                |  var x;
@@ -86,16 +86,16 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
     "compile a bare file" in {
       withTempFiles(List("x = 1"), 1) {
         case List(tmpDir, csFile, jsFile) =>
-          compile(CompileArgs(
+          compileBatch(List(CompileArgs(
             coffeeScriptInputFile = csFile,
             javaScriptOutputFile = jsFile,
             sourceMapOpts = None,
             bare = true,
             literate = false
-          ))
+          )))
       } match {
         case (compileResult, List(jsString)) =>
-           compileResult must_== (CompileSuccess)
+           compileResult must_== (List(CompileSuccess))
            jsString must_== Some(
             """|var x;
                |
@@ -113,16 +113,16 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
              |
              |More markdown.""".stripMargin('|')), 1) {
         case List(tmpDir, csFile, jsFile) =>
-          compile(CompileArgs(
+          compileBatch(List(CompileArgs(
             coffeeScriptInputFile = csFile,
             javaScriptOutputFile = jsFile,
             sourceMapOpts = None,
             bare = false,
             literate = true
-          ))
+          )))
       } match {
         case (compileResult, List(jsString)) =>
-          compileResult must_== (CompileSuccess)
+          compileResult must_== (List(CompileSuccess))
           jsString must_== Some(
               """|(function() {
                |  var x, y;
@@ -139,7 +139,7 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
     "compile with source maps" in {
       withTempFiles(List("x = 1"), 2) {
         case List(tmpDir, csFile, jsFile, mapFile) =>
-          compile(CompileArgs(
+          compileBatch(List(CompileArgs(
             coffeeScriptInputFile = csFile,
             javaScriptOutputFile = jsFile,
             sourceMapOpts = Some(SourceMapOptions(
@@ -151,10 +151,10 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
             )),
             bare = false,
             literate = false
-          ))
+          )))
       } match {
         case (compileResult, List(jsString, mapString)) =>
-           compileResult must_== (CompileSuccess)
+           compileResult must_== (List(CompileSuccess))
            jsString must_== Some(
             """|(function() {
                |  var x;
@@ -179,6 +179,45 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
                |  "names": [],
                |  "mappings": "AAAA;CAAA,KAAA;;CAAA,CAAA,CAAI;CAAJ"
                |}""".stripMargin('|'))
+      }
+    }
+
+    "compile two files" in {
+      withTempFiles(List("x = 1", "y = 2"), 2) {
+        case List(tmpDir, csFile1, csFile2, jsFile1, jsFile2) =>
+          compileBatch(List(
+            CompileArgs(
+              coffeeScriptInputFile = csFile1,
+              javaScriptOutputFile = jsFile1,
+              sourceMapOpts = None,
+              bare = true,
+              literate = false
+            ),
+            CompileArgs(
+              coffeeScriptInputFile = csFile2,
+              javaScriptOutputFile = jsFile2,
+              sourceMapOpts = None,
+              bare = true,
+              literate = false
+            )
+          ))
+      } match {
+        case (compileResultSeq, jsContentSeq) =>
+           compileResultSeq must_== (List(CompileSuccess, CompileSuccess))
+           jsContentSeq must_== List(
+            Some(
+              """|var x;
+                 |
+                 |x = 1;
+                 |""".stripMargin('|')
+            ),
+            Some(
+              """|var y;
+                 |
+                 |y = 2;
+                 |""".stripMargin('|')
+            )
+          )
       }
     }
 
