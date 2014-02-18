@@ -6,9 +6,10 @@ package com.typesafe.coffeescript.sbt
 import akka.actor.ActorRefFactory
 import com.typesafe.coffeescript._
 import com.typesafe.jse.Node
-import com.typesafe.web.sbt.{ CompileProblems, LineBasedProblem, WebPlugin }
-import com.typesafe.web.sbt.WebPlugin.WebKeys
-import com.typesafe.web.sbt.incremental._
+import com.typesafe.sbt.web.{CompileProblems, LineBasedProblem}
+import com.typesafe.sbt.web.SbtWebPlugin
+import com.typesafe.sbt.web.incremental._
+import com.typesafe.sbt.jse.SbtJsEnginePlugin
 import _root_.sbt._
 import _root_.sbt.Keys._
 import scala.concurrent.ExecutionContext
@@ -32,7 +33,8 @@ object CoffeeScriptPlugin extends Plugin {
     val compileArgs = TaskKey[Seq[CompileArgs]](cs("compile-args"), "CompileArgs instructions for the CoffeeScript compiler.")
   }
 
-  import WebKeys._
+  import SbtJsEnginePlugin.JsEngineKeys._
+  import SbtWebPlugin.WebKeys._
   import CoffeeScriptKeys._
 
   /**
@@ -111,7 +113,7 @@ object CoffeeScriptPlugin extends Plugin {
 
           val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(cacheDirectory / "shell.js")
 
-          WebPlugin.withActorRefFactory(sbtState, "coffeeScriptCompile") { implicit actorRefFactory =>
+          SbtWebPlugin.withActorRefFactory(sbtState, "coffeeScriptCompile") { implicit actorRefFactory =>
             import actorRefFactory.dispatcher
             val jsExecutor = new DefaultJsExecutor(Node.props(), actorRefFactory)
             neededCompiles.foldLeft[(Map[CompileArgs,OpResult], Seq[Problem])]((Map.empty, Seq.empty)) {
@@ -123,7 +125,7 @@ object CoffeeScriptPlugin extends Plugin {
         }
       }
 
-      CompileProblems.report(WebKeys.reporter.value, problems)
+      CompileProblems.report(reporter.value, problems)
     }
   )
 
