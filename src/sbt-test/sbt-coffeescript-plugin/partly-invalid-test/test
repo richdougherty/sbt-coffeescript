@@ -14,7 +14,7 @@ $ exists src/main/assets/valid3.litcoffee
 $ exists src/main/assets/valid4.coffee
 -$ exists target/public/valid4.js
 -$ exists target/public/valid4.js.map
--> compile
+-> coffeeScript
 $ exists src/main/assets/valid1.coffee
 $ exists target/public/valid1.js
 $ exists target/public/valid1.js.map

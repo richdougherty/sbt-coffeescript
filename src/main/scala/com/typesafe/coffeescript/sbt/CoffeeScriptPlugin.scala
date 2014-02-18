@@ -20,10 +20,10 @@ final case class CoffeeScriptPluginException(message: String) extends Exception(
 
 object CoffeeScriptPlugin extends Plugin {
 
-  private def cs(setting: String) = s"coffee-script-$setting"
+  private def cs(setting: String) = s"coffeeScript-$setting"
 
   object CoffeeScriptKeys {
-    val compile = TaskKey[Unit]("coffee-script", "Compile CoffeeScript sources into JavaScript.")
+    val coffeeScript = TaskKey[Unit]("coffeeScript", "Compile CoffeeScript sources into JavaScript.")
     val sourceFilter = SettingKey[FileFilter](cs("filter"), "A filter matching CoffeeScript and literate CoffeeScript sources.")
     val outputDirectory = SettingKey[File](cs("output-directory"), "The output directory for compiled JavaScript files and source maps.")
     val literateFilter = SettingKey[NameFilter](cs("literate-filter"), "A filter to identify literate CoffeeScript files.")
@@ -32,20 +32,25 @@ object CoffeeScriptPlugin extends Plugin {
     val compileArgs = TaskKey[Seq[CompileArgs]](cs("compile-args"), "CompileArgs instructions for the CoffeeScript compiler.")
   }
 
+  import WebKeys._
+  import CoffeeScriptKeys._
+
   /**
    * Use this to import CoffeeScript settings into a specific scope,
    * e.g. `Project.inConfig(WebKeys.Assets)(scopedSettings)`. These settings intentionally
    * have no dependency on sbt-web settings or directories, making it possible to use these
    * settings for non-web CoffeeScript compilation.
    */
-  def scopedSettings: Seq[Setting[_]] = Seq(
-    includeFilter in CoffeeScriptKeys.compile := GlobFilter("*.coffee") | GlobFilter("*.litcoffee"),
-    excludeFilter in CoffeeScriptKeys.compile := NothingFilter,
-    sourceDirectories in CoffeeScriptKeys.compile := sourceDirectories.value,
-    sources in CoffeeScriptKeys.compile := {
-      val dirs = (sourceDirectories in CoffeeScriptKeys.compile).value
-      val include = (includeFilter in CoffeeScriptKeys.compile).value
-      val exclude = (excludeFilter in CoffeeScriptKeys.compile).value
+  val unscopedSettings: Seq[Setting[_]] = Seq(
+    compile <<= compile.dependsOn(coffeeScript),
+    CoffeeScriptKeys.outputDirectory := resourceManaged.value,
+    includeFilter in CoffeeScriptKeys.coffeeScript := GlobFilter("*.coffee") | GlobFilter("*.litcoffee"),
+    excludeFilter in CoffeeScriptKeys.coffeeScript := NothingFilter,
+    sourceDirectory in CoffeeScriptKeys.coffeeScript := sourceDirectory.value,
+    sources in CoffeeScriptKeys.coffeeScript := {
+      val dirs = (sourceDirectories in CoffeeScriptKeys.coffeeScript).value
+      val include = (includeFilter in CoffeeScriptKeys.coffeeScript).value
+      val exclude = (excludeFilter in CoffeeScriptKeys.coffeeScript).value
       (dirs ** (include -- exclude)).get
     },
     CoffeeScriptKeys.sourceMaps := true,
@@ -56,8 +61,8 @@ object CoffeeScriptPlugin extends Plugin {
       val sourceMaps = CoffeeScriptKeys.sourceMaps.value
 
       // http://www.scala-sbt.org/release/docs/Detailed-Topics/Mapping-Files.html
-      val inputSources = (sources in CoffeeScriptKeys.compile).value.get
-      val inputDirectories = (sourceDirectories in CoffeeScriptKeys.compile).value.get
+      val inputSources = (sources in CoffeeScriptKeys.coffeeScript).value.get
+      val inputDirectories = (sourceDirectories in CoffeeScriptKeys.coffeeScript).value.get
       val outputDirectory = CoffeeScriptKeys.outputDirectory.value
       for {
         (csFile, rebasedFile) <- inputSources x rebase(inputDirectories, outputDirectory)
@@ -91,7 +96,7 @@ object CoffeeScriptPlugin extends Plugin {
         )
       }
     },
-    CoffeeScriptKeys.compile := {
+    CoffeeScriptKeys.coffeeScript := {
       val log = streams.value.log
       val compiles = CoffeeScriptKeys.compileArgs.value.to[Vector]
       val sbtState = state.value
@@ -119,11 +124,6 @@ object CoffeeScriptPlugin extends Plugin {
       }
 
       CompileProblems.report(WebKeys.reporter.value, problems)
-    },
-    compile := {
-      val compileAnalysis = compile.value
-      val unused = CoffeeScriptKeys.compile.value
-      compileAnalysis
     }
   )
 
@@ -154,30 +154,32 @@ object CoffeeScriptPlugin extends Plugin {
     }
   }
 
-    // TODO: Put in sbt-web
-  object TodoWeb {
-    def webSettings: Seq[Setting[_]] = Seq[Setting[_]](
-      (compile in Compile) <<= (compile in Compile).dependsOn(compile in WebKeys.Assets),
-      (compile in Test) <<= (compile in Test).dependsOn(compile in WebKeys.TestAssets)
-    ) ++ Project.inConfig(WebKeys.Assets)(scopedSettings) ++ Project.inConfig(WebKeys.TestAssets)(scopedSettings)
+  object TodoWebPlugin {
+    def settings: Seq[Setting[_]] = Seq(
+      // Stub compile tasks in WebPlugin
+      compile in Assets := inc.Analysis.Empty,
+      compile in TestAssets := inc.Analysis.Empty,
+      compile in TestAssets <<= (compile in TestAssets).dependsOn(compile in Assets),
 
-    def scopedSettings: Seq[Setting[_]] = Seq(
-      compile := inc.Analysis.Empty,
-      sourceDirectories := unmanagedSourceDirectories.value
+      // Stub test tasks in WebPlugin
+      test in TestAssets := (),
+      test in TestAssets <<= (test in TestAssets).dependsOn(compile in TestAssets),
+
+      // Link tasks in web scopes to tasks in main scopes
+      compile in Compile <<= (compile in Compile).dependsOn(compile in Assets),
+      compile in Test <<= (compile in Test).dependsOn(compile in TestAssets),
+      test in Test <<= (test in Test).dependsOn(test in TestAssets),
+
+      // FIXME: remove
+      sourceDirectories in Assets := (unmanagedSourceDirectories in Assets).value,
+      sourceDirectories in TestAssets := (unmanagedSourceDirectories in TestAssets).value
     )
   }
 
   def coffeeScriptSettings: Seq[Setting[_]] =
-    TodoWeb.webSettings ++
-    Seq[Setting[_]](
-      CoffeeScriptKeys.compile in Compile := (CoffeeScriptKeys.compile in WebKeys.Assets).value,
-      CoffeeScriptKeys.compile in Test := (CoffeeScriptKeys.compile in WebKeys.TestAssets).value,
-      CoffeeScriptKeys.outputDirectory in WebKeys.Assets := (resourceManaged in WebKeys.Assets).value,
-      CoffeeScriptKeys.outputDirectory in WebKeys.TestAssets := (resourceManaged in WebKeys.TestAssets).value,
-      includeFilter in (WebKeys.TestAssets, CoffeeScriptKeys.compile) := GlobFilter("*Test.coffee") | GlobFilter("*Test.litcoffee"),
-      excludeFilter in (WebKeys.Assets, CoffeeScriptKeys.compile) := (includeFilter in (WebKeys.TestAssets, CoffeeScriptKeys.compile)).value
-    ) ++
-    Project.inConfig(WebKeys.Assets)(scopedSettings) ++
-    Project.inConfig(WebKeys.TestAssets)(scopedSettings)
-
+    TodoWebPlugin.settings ++
+    Project.inConfig(Assets)(unscopedSettings) ++
+    Project.inConfig(TestAssets)(unscopedSettings) ++ Seq(
+      coffeeScript := (coffeeScript in Assets).value
+    )
 }

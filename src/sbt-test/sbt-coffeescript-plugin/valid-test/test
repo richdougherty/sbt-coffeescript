@@ -5,14 +5,14 @@ $ exists src/main/assets/valid1.coffee
 $ exists src/main/assets/valid2.coffee
 -$ exists target/public/valid2.js
 -$ exists target/public/valid2.js.map
-> compile
+> coffeeScript
 $ exists src/main/assets/valid1.coffee
 $ exists target/public/valid1.js
 $ exists target/public/valid1.js.map
 $ exists src/main/assets/valid2.coffee
 $ exists target/public/valid2.js
 $ exists target/public/valid2.js.map
-> compile
+> coffeeScript
 $ exists src/main/assets/valid1.coffee
 $ exists target/public/valid1.js
 $ exists target/public/valid1.js.map
