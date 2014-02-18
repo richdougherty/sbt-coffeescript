@@ -5,7 +5,6 @@ package com.typesafe.coffeescript
 
 import com.typesafe.jse.{Rhino, CommonNode, Node, Engine}
 import com.typesafe.jse.Engine.{ExecuteJs, JsExecutionResult}
-import com.typesafe.web.sbt.WebPlugin
 import java.io.{InputStream, File}
 import java.util.concurrent.TimeUnit
 import _root_.sbt.IO

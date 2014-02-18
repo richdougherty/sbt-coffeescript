@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2009-2014 Typesafe Inc. <http://www.typesafe.com>
  */
-package com.typesafe.coffeescript.sbt
+package com.typesafe.sbt.coffeescript
 
 import akka.actor.ActorRefFactory
 import com.typesafe.coffeescript._
@@ -17,9 +17,9 @@ import scala.concurrent.duration._
 import spray.json._
 import xsbti.{Problem, Severity}
 
-final case class CoffeeScriptPluginException(message: String) extends Exception(message)
+final case class CoffeeScriptPluginExceptionException(message: String) extends Exception(message)
 
-object CoffeeScriptPlugin extends Plugin {
+object CoffeeScriptPluginException extends Plugin {
 
   private def cs(setting: String) = s"coffeeScript-$setting"
 
@@ -152,7 +152,7 @@ object CoffeeScriptPlugin extends Plugin {
           ))
         )
       case err: GenericError =>
-        throw CoffeeScriptPluginException(err.message)
+        throw CoffeeScriptPluginExceptionException(err.message)
     }
   }
 
