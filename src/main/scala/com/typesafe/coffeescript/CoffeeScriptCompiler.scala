@@ -110,20 +110,21 @@ object CoffeeScriptCompiler {
 
 class CoffeeScriptCompiler(shellFile: File) {
 
-  def compileFile(jsExecutor: JsExecutor, compileArgs: CompileArgs)(implicit ec: ExecutionContext): CompileResult = {
-    val results: Seq[CompileResult] = compileBatch(jsExecutor, Seq(compileArgs))
-    assert(results.length == 1)
-    results(0)
+  def compileFile(jsExecutor: JsExecutor, compileArgs: CompileArgs)(implicit ec: ExecutionContext): Future[CompileResult] = {
+    compileBatch(jsExecutor, Seq(compileArgs)).map { resultsSeq =>
+      assert(resultsSeq.length == 1)
+      val result = resultsSeq(0)
+      result
+    }
   }
 
-  def compileBatch(jsExecutor: JsExecutor, compileArgs: Seq[CompileArgs])(implicit ec: ExecutionContext): Seq[CompileResult] = {
+  def compileBatch(jsExecutor: JsExecutor, compileArgs: Seq[CompileArgs])(implicit ec: ExecutionContext): Future[Seq[CompileResult]] = {
 
     import CoffeeScriptCompiler.JsonConversion
 
     val arg = JsonConversion.toJsonSeq(compileArgs).compactPrint
 
-    val jsExecResult = jsExecutor.executeJsSync(shellFile, immutable.Seq(arg))
-    jsExecResult match {
+    jsExecutor.executeJs(shellFile, immutable.Seq(arg)).map {
       case JsExecutionResult(0, stdoutBytes, stderrBytes) if stderrBytes.length == 0 =>
         val jsonResult = (new String(stdoutBytes.toArray, "utf-8")).asJson.asInstanceOf[JsArray]
         JsonConversion.fromJsonSeq(jsonResult)

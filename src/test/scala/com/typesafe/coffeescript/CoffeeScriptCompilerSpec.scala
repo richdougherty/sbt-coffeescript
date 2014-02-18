@@ -9,6 +9,7 @@ import akka.util.Timeout
 import scala.concurrent.duration._
 import org.specs2.time.NoTimeConversions
 import java.io.File
+import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import _root_.sbt.IO
 import scala.collection.immutable
@@ -51,7 +52,8 @@ class CoffeeScriptCompilerSpec extends Specification with NoTimeConversions {
       val tempFile = File.createTempFile("sbt-coffeescript-shell", ".js")
       tempFile.deleteOnExit()
       val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(tempFile)
-      compiler.compileBatch(jsExecutor, argsSeq).to[List]
+      val compileResultSeq = Await.result(compiler.compileBatch(jsExecutor, argsSeq), Duration(1, TimeUnit.MINUTES))
+      compileResultSeq.to[List]
     } finally {
       actorSystem.shutdown()
     }

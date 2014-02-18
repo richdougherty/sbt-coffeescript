@@ -12,7 +12,7 @@ import com.typesafe.sbt.web.incremental._
 import com.typesafe.sbt.jse.SbtJsEnginePlugin
 import _root_.sbt._
 import _root_.sbt.Keys._
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import spray.json._
 import xsbti.{Problem, Severity}
@@ -104,23 +104,19 @@ object CoffeeScriptPluginException extends Plugin {
       val sbtState = state.value
       val cacheDirectory = streams.value.cacheDirectory
 
-      val problems = runIncremental[CompileArgs, Seq[Problem]](cacheDirectory, compiles) { neededCompiles: Seq[CompileArgs] =>
+      val problems: Seq[Problem] = runIncremental[CompileArgs, Seq[Problem]](cacheDirectory, compiles) { neededCompiles: Seq[CompileArgs] =>
         val sourceCount = neededCompiles.length
 
         if (sourceCount == 0) (Map.empty, Seq.empty) else {
           val sourceString = if (sourceCount == 1) "source" else "sources"
           log.info(s"Compiling ${sourceCount} CoffeeScript ${sourceString}...")
 
-          val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(cacheDirectory / "shell.js")
-
           SbtWebPlugin.withActorRefFactory(sbtState, "coffeeScriptCompile") { implicit actorRefFactory =>
             import actorRefFactory.dispatcher
             val jsExecutor = new DefaultJsExecutor(Node.props(), actorRefFactory)
-            neededCompiles.foldLeft[(Map[CompileArgs,OpResult], Seq[Problem])]((Map.empty, Seq.empty)) {
-              case ((resultMap, problemSeq), compilation) => runSingleCompile(compiler, jsExecutor, compilation) match {
-                case (newResult, newProblems) => (resultMap.updated(compilation, newResult), problemSeq ++ newProblems)
-              }
-            }
+            val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(cacheDirectory / "shell.js")
+            val compileResults = parallelBatchCompile(compiler, jsExecutor, neededCompiles, parallelism.value)
+            (Await.result(compileResults, Duration.Inf): (Map[CompileArgs,OpResult], Seq[Problem]))
           }
         }
       }
@@ -129,13 +125,48 @@ object CoffeeScriptPluginException extends Plugin {
     }
   )
 
-  def runSingleCompile(compiler: CoffeeScriptCompiler, jsExecutor: JsExecutor, compilation: CompileArgs)(implicit ec: ExecutionContext): (OpResult, Seq[Problem]) = {
-    compiler.compileFile(jsExecutor, compilation) match {
+  def makeBatches[A](xs: Seq[A], count: Int): Seq[Seq[A]] = {
+    (xs grouped Math.max(xs.size / count, 1)).toSeq
+  }
+
+  private def parallelBatchCompile(
+      compiler: CoffeeScriptCompiler,
+      jsExecutor: JsExecutor,
+      compileArgs: Seq[CompileArgs],
+      parallelism: Int)(implicit ec: ExecutionContext): Future[(Map[CompileArgs,OpResult], Seq[Problem])] = {
+    val argsBatches = makeBatches(compileArgs, parallelism)
+    val resultsBatches = Future.sequence(argsBatches.map(compileArgs => batchCompile(compiler, jsExecutor, compileArgs)))
+    val mergedResults = resultsBatches.map(_.foldLeft[(Map[CompileArgs,OpResult], Seq[Problem])](Map.empty, Seq.empty) {
+      case ((resultMap, problemSeq), (batchResultMap, batchProblemSeq)) => (resultMap ++ batchResultMap, problemSeq ++ batchProblemSeq)
+    })
+    mergedResults
+  }
+
+  private def batchCompile(
+      compiler: CoffeeScriptCompiler,
+      jsExecutor: JsExecutor,
+      compileArgs: Seq[CompileArgs])(implicit ec: ExecutionContext): Future[(Map[CompileArgs,OpResult], Seq[Problem])] = {
+    compiler.compileBatch(jsExecutor, compileArgs).map { compileResults =>
+      val argsAndResult: Seq[(CompileArgs,CompileResult)] = (compileArgs zip compileResults)
+      val converted: Seq[(CompileArgs, (OpResult, Seq[Problem]))] = argsAndResult.map {
+        case (args, result) => (args, convertCompileResult(args, result))
+      }
+      val merged = converted.foldLeft[(Map[CompileArgs,OpResult], Seq[Problem])]((Map.empty, Seq.empty)) {
+        case ((resultMap, problemSeq), (compileArgs, (newResult, newProblems))) => {
+          (resultMap.updated(compileArgs, newResult), problemSeq ++ newProblems)
+        }
+      }
+      merged
+    }
+  }
+
+  private def convertCompileResult(compileArgs: CompileArgs, compileResult: CompileResult): (OpResult, Seq[Problem]) = {
+    compileResult match {
       case CompileSuccess =>
         (
           OpSuccess(
-            filesRead = Set(compilation.coffeeScriptInputFile),
-            filesWritten = Set(compilation.javaScriptOutputFile) ++ compilation.sourceMapOpts.map(_.sourceMapOutputFile).to[Set]
+            filesRead = Set(compileArgs.coffeeScriptInputFile),
+            filesWritten = Set(compileArgs.javaScriptOutputFile) ++ compileArgs.sourceMapOpts.map(_.sourceMapOutputFile).to[Set]
           ),
           Seq.empty
         )
@@ -148,7 +179,7 @@ object CoffeeScriptPluginException extends Plugin {
             lineNumber = err.lineNumber,
             characterOffset = err.lineOffset,
             lineContent = err.lineContent,
-            source = compilation.coffeeScriptInputFile
+            source = compileArgs.coffeeScriptInputFile
           ))
         )
       case err: GenericError =>
