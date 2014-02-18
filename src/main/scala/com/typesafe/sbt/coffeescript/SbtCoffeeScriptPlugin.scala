@@ -188,30 +188,7 @@ object CoffeeScriptPluginException extends Plugin {
     }
   }
 
-  object TodoWebPlugin {
-    def settings: Seq[Setting[_]] = Seq(
-      // Stub compile tasks in WebPlugin
-      compile in Assets := inc.Analysis.Empty,
-      compile in TestAssets := inc.Analysis.Empty,
-      compile in TestAssets <<= (compile in TestAssets).dependsOn(compile in Assets),
-
-      // Stub test tasks in WebPlugin
-      test in TestAssets := (),
-      test in TestAssets <<= (test in TestAssets).dependsOn(compile in TestAssets),
-
-      // Link tasks in web scopes to tasks in main scopes
-      compile in Compile <<= (compile in Compile).dependsOn(compile in Assets),
-      compile in Test <<= (compile in Test).dependsOn(compile in TestAssets),
-      test in Test <<= (test in Test).dependsOn(test in TestAssets),
-
-      // FIXME: remove
-      sourceDirectories in Assets := (unmanagedSourceDirectories in Assets).value,
-      sourceDirectories in TestAssets := (unmanagedSourceDirectories in TestAssets).value
-    )
-  }
-
   def coffeeScriptSettings: Seq[Setting[_]] =
-    TodoWebPlugin.settings ++
     Project.inConfig(Assets)(unscopedSettings) ++
     Project.inConfig(TestAssets)(unscopedSettings) ++ Seq(
       coffeeScript := (coffeeScript in Assets).value
