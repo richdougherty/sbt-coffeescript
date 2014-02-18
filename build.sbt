@@ -29,4 +29,14 @@ scriptedSettings
 
 scriptedLaunchOpts <+= version apply { v => s"-Dproject.version=$v" }
 
-fork in run := true
+publishMavenStyle := false
+
+publishTo := {
+  val isSnapshot = version.value.contains("-SNAPSHOT")
+  val scalasbt = "http://repo.scala-sbt.org/scalasbt/"
+  val (name, url) = if (isSnapshot)
+    ("sbt-plugin-snapshots", scalasbt + "sbt-plugin-snapshots")
+  else
+    ("sbt-plugin-releases", scalasbt + "sbt-plugin-releases")
+  Some(Resolver.url(name, new URL(url))(Resolver.ivyStylePatterns))
+}
