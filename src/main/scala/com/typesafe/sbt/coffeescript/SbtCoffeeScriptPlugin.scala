@@ -103,6 +103,7 @@ object CoffeeScriptPluginException extends Plugin {
       val compiles = CoffeeScriptKeys.compileArgs.value.to[Vector]
       val sbtState = state.value
       val cacheDirectory = streams.value.cacheDirectory
+      val parallelValue = (parallelism in coffeeScript).value
 
       val problems: Seq[Problem] = runIncremental[CompileArgs, Seq[Problem]](cacheDirectory, compiles) { neededCompiles: Seq[CompileArgs] =>
         val sourceCount = neededCompiles.length
@@ -115,7 +116,7 @@ object CoffeeScriptPluginException extends Plugin {
             import actorRefFactory.dispatcher
             val jsExecutor = new DefaultJsExecutor(Node.props(), actorRefFactory)
             val compiler = CoffeeScriptCompiler.withShellFileCopiedTo(cacheDirectory / "shell.js")
-            val compileResults = parallelBatchCompile(compiler, jsExecutor, neededCompiles, parallelism.value)
+            val compileResults = parallelBatchCompile(compiler, jsExecutor, neededCompiles, parallelValue)
             (Await.result(compileResults, Duration.Inf): (Map[CompileArgs,OpResult], Seq[Problem]))
           }
         }
@@ -126,7 +127,7 @@ object CoffeeScriptPluginException extends Plugin {
   )
 
   def makeBatches[A](xs: Seq[A], count: Int): Seq[Seq[A]] = {
-    (xs grouped Math.max(xs.size / count, 1)).toSeq
+    (xs grouped Math.max(xs.size / count, 1)).to[Vector]
   }
 
   private def parallelBatchCompile(
