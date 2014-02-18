@@ -63,6 +63,9 @@ object CoffeeScriptCompiler {
 
   object JsonConversion {
     import DefaultJsonProtocol._
+    def toJsonSeq(args: Seq[CompileArgs]): JsArray = {
+      JsArray(args.map(toJson).to[List])
+    }
     def toJson(args: CompileArgs): JsObject = {
       import args._
       JsObject(
@@ -99,6 +102,9 @@ object CoffeeScriptCompiler {
           throw CoffeeScriptCompilerException(s"Unknown JSON result running CoffeeScript driver: $json")
       }
     }
+    def fromJsonSeq(json: JsArray): Seq[CompileResult] = {
+      json.elements.map(v => fromJson(v.asInstanceOf[JsObject]))
+    }
   }
 
 }
@@ -106,16 +112,22 @@ object CoffeeScriptCompiler {
 class CoffeeScriptCompiler(shellFile: File) {
 
   def compileFile(jsExecutor: JsExecutor, compileArgs: CompileArgs)(implicit ec: ExecutionContext): CompileResult = {
+    val results: Seq[CompileResult] = compileBatch(jsExecutor, Seq(compileArgs))
+    assert(results.length == 1)
+    results(0)
+  }
+
+  def compileBatch(jsExecutor: JsExecutor, compileArgs: Seq[CompileArgs])(implicit ec: ExecutionContext): Seq[CompileResult] = {
 
     import CoffeeScriptCompiler.JsonConversion
 
-    val arg = JsonConversion.toJson(compileArgs).compactPrint
+    val arg = JsonConversion.toJsonSeq(compileArgs).compactPrint
 
     val jsExecResult = jsExecutor.executeJsSync(shellFile, immutable.Seq(arg))
     jsExecResult match {
       case JsExecutionResult(0, stdoutBytes, stderrBytes) if stderrBytes.length == 0 =>
-        val jsonResult = (new String(stdoutBytes.toArray, "utf-8")).asJson.asInstanceOf[JsObject]
-        JsonConversion.fromJson(jsonResult)
+        val jsonResult = (new String(stdoutBytes.toArray, "utf-8")).asJson.asInstanceOf[JsArray]
+        JsonConversion.fromJsonSeq(jsonResult)
       case result =>
         val exitValue = result.exitValue
         val stdout = new String(result.output.toArray, "utf-8")

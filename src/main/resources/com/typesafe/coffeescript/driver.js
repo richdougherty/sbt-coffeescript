@@ -30,8 +30,8 @@ function trace(/*arguments*/) {
 
 trace('Command line arguments:', process.argv[2]);
 var opts = JSON.parse(process.argv[2]);
-var result = compileFile(opts);
-process.stdout.write(JSON.stringify(result));
+var result = compileFile(opts[0]);
+process.stdout.write(JSON.stringify([result]));
 
 
 // Make the any parent directories needed for the given path
